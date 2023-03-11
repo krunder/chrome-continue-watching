@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "Extended Continue Watching",
+  "version": "1.0",
+  "description": "Add extra features to the continue watching section of streaming services.",
+  "content_scripts": [
+    {
+      "js": ["scripts/services/disneyplus.js"],
+      "matches": [
+        "https://disneyplus.com/",
+        "https://disneyplus.com/home",
+        "https://www.disneyplus.com/",
+        "https://www.disneyplus.com/home"
+      ]
+    }
+  ]
+}
