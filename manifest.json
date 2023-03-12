@@ -2,7 +2,11 @@
   "manifest_version": 3,
   "name": "Extended Continue Watching",
   "version": "1.0",
-  "description": "Add extra features to the continue watching section of streaming services.",
+  "description": "Add extra features to the continue watching section of streaming services such as Disney+.",
+  "icons": {
+    "48": "img/icon48.png",
+    "128": "img/icon128.png"
+  },
   "content_scripts": [
     {
       "js": ["scripts/services/disneyplus.js"],
