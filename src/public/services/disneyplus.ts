@@ -90,29 +90,14 @@ let continueWatchingContainer: CollectionContainer | undefined;
 
 let initialRequestAttempted = false;
 
-const sendGraphRequest = <D>(
+const sendRequest = <D>(
+  baseUrl: string,
   method: string,
   path: string,
   data?: D,
   options: RequestInit = {},
 ): Promise<Response> => (
-    fetch(`${BASE_GRAPH_URL}/${path}`, {
-      method,
-      headers: {
-        ...requestOptions.headers,
-        ...(options.headers || {}),
-      },
-      body: data ? JSON.stringify(data) : undefined,
-    })
-  );
-
-const sendContentRequest = <D>(
-  method: string,
-  path: string,
-  data?: D,
-  options: RequestInit = {},
-): Promise<Response> => (
-    fetch(`${BASE_CONTENT_URL}/${path}`, {
+    fetch(`${baseUrl}/${path}`, {
       method,
       headers: {
         ...requestOptions.headers,
@@ -129,7 +114,7 @@ const getCollections = (): Promise<CollectionResponseData> => {
 
   const path = `svc/content/Collection/PersonalizedCollection/version/6.0/region/${region}/audience/k-${isKidsModeEnabled},l-true/maturity/${impliedMaturityRating}/language/${appLanguage}/contentClass/home/slug/home`;
 
-  return sendContentRequest('GET', path)
+  return sendRequest(BASE_CONTENT_URL, 'GET', path)
     .then((response: Response): Promise<CollectionResponseData> => response.json());
 };
 
@@ -140,7 +125,7 @@ const getContinueWatching = (setId: string): Promise<ContinueWatchingResponseDat
 
   const path = `svc/content/ContinueWatching/Set/version/5.1/region/${region}/audience/k-${isKidsModeEnabled},l-true/maturity/${impliedMaturityRating}/language/${appLanguage}/setId/${setId}`;
 
-  return sendContentRequest('GET', path)
+  return sendRequest(BASE_CONTENT_URL, 'GET', path)
     .then((response: Response): Promise<ContinueWatchingResponseData> => response.json());
 };
 
@@ -162,7 +147,7 @@ const removeFromContinueWatching = (item: ContinueWatchingItem): Promise<string>
     },
   ];
 
-  return sendGraphRequest('POST', 'telemetry', data)
+  return sendRequest(BASE_GRAPH_URL, 'POST', 'telemetry', data)
     .then((response: Response): Promise<string> => response.text());
 };
 
@@ -203,7 +188,7 @@ window.XMLHttpRequest.prototype.setRequestHeader = function setRequestHeader(
     if (!initialRequestAttempted) {
       initialRequestAttempted = true;
 
-      sendGraphRequest<GraphQLRequestData>('POST', 'v1/public/graphql', {
+      sendRequest<GraphQLRequestData>(BASE_GRAPH_URL, 'POST', 'v1/public/graphql', {
         query,
         variables: {},
       })
