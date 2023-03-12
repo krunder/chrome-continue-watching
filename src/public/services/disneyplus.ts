@@ -55,18 +55,49 @@ interface CollectionResponseData {
   };
 }
 
+interface ContentMediaMetadata {
+  mediaId: string;
+  runtimeMillis: number;
+}
+
 interface ContinueWatchingItem {
   contentId: string;
-  mediaMetadata: {
-    mediaId: string;
-    runtimeMillis: number;
-  };
+  encodedSeriesId: string | null;
+  mediaMetadata: ContentMediaMetadata;
 }
 
 interface ContinueWatchingResponseData {
   data: {
     ContinueWatchingSet: {
       items: ContinueWatchingItem[];
+    };
+  };
+}
+
+interface Season {
+  seasonId: string;
+  seasonSequenceNumber: number;
+}
+
+interface SeriesResponseData {
+  data: {
+    DmcSeriesBundle: {
+      seasons: {
+        seasons: Season[];
+      };
+    };
+  };
+}
+
+interface EpisodeVideo {
+  episodeSequenceNumber: number;
+  mediaMetadata: ContentMediaMetadata;
+}
+
+interface EpisodesResponseData {
+  data: {
+    DmcEpisodes: {
+      videos: EpisodeVideo[];
     };
   };
 }
@@ -129,17 +160,39 @@ const getContinueWatching = (setId: string): Promise<ContinueWatchingResponseDat
     .then((response: Response): Promise<ContinueWatchingResponseData> => response.json());
 };
 
-const removeFromContinueWatching = (item: ContinueWatchingItem): Promise<string> => {
+const getSeries = (encodedSeriesId: string): Promise<SeriesResponseData> => {
+  const {
+    isKidsModeEnabled, impliedMaturityRating, appLanguage, region,
+  } = requestOptions;
+
+  const path = `svc/content/DmcSeriesBundle/version/5.1/region/${region}/audience/k-${isKidsModeEnabled},l-true/maturity/${impliedMaturityRating}/language/${appLanguage}/encodedSeriesId/${encodedSeriesId}`;
+
+  return sendRequest(BASE_CONTENT_URL, 'GET', path)
+    .then((response: Response): Promise<SeriesResponseData> => response.json());
+};
+
+const getEpisodes = (seasonId: string): Promise<EpisodesResponseData> => {
+  const {
+    isKidsModeEnabled, impliedMaturityRating, appLanguage, region,
+  } = requestOptions;
+
+  const path = `svc/content/DmcEpisodes/version/5.1/region/${region}/audience/k-${isKidsModeEnabled},l-true/maturity/${impliedMaturityRating}/language/${appLanguage}/seasonId/${seasonId}/pageSize/60/page/1`;
+
+  return sendRequest(BASE_CONTENT_URL, 'GET', path)
+    .then((response: Response): Promise<EpisodesResponseData> => response.json());
+};
+
+const sendTelemetry = (mediaId: string, runtimeMillis: number): Promise<string> => {
   const data = [
     {
       server: {
         fguid: 'unknown',
-        mediaId: item.mediaMetadata.mediaId,
+        mediaId,
       },
       client: {
         event: 'urn:dss:telemetry-service:event:stream-sample',
         timestamp: (new Date()).getTime(),
-        play_head: item.mediaMetadata.runtimeMillis / 1000,
+        play_head: runtimeMillis / 1000,
         playback_session_id: 'unknown',
         bitrate: 50,
         interaction_id: 'unknown',
@@ -233,14 +286,46 @@ const createRemoveButton = (contentId: string): HTMLButtonElement => {
     if (continueWatchingContainer) {
       const { set: { refId: setId } } = continueWatchingContainer;
 
-      getContinueWatching(setId).then(({ data }: ContinueWatchingResponseData): void => {
-        const item = data.ContinueWatchingSet.items.find(
+      getContinueWatching(setId).then(({ data: setData }: ContinueWatchingResponseData): void => {
+        const item = setData.ContinueWatchingSet.items.find(
           (thisItem: ContinueWatchingItem): boolean => thisItem.contentId === contentId,
         );
 
         if (item) {
-          removeFromContinueWatching(item)
-            .then((): void => removeButton.closest('.slick-slide')?.remove());
+          if (item.encodedSeriesId) {
+            getSeries(item.encodedSeriesId).then((
+              { data }: SeriesResponseData,
+            ): Promise<EpisodesResponseData> => {
+              const { seasons } = data.DmcSeriesBundle.seasons;
+
+              const latestSeason = seasons.reduce((latest: Season, season: Season): Season => (
+                season.seasonSequenceNumber > latest.seasonSequenceNumber ? season : latest
+              // @ts-ignore
+              ), { seasonSequenceNumber: 0 });
+
+              return getEpisodes(latestSeason.seasonId);
+            }).then(({ data }: EpisodesResponseData): void => {
+              const { videos } = data.DmcEpisodes;
+
+              const latestEpisode: EpisodeVideo = videos.reduce((
+                latest: EpisodeVideo,
+                episode: EpisodeVideo,
+              ): EpisodeVideo => (
+                episode.episodeSequenceNumber > latest.episodeSequenceNumber ? episode : latest
+              // @ts-ignore
+              ), { episodeSequenceNumber: 0 });
+
+              const { mediaId, runtimeMillis } = latestEpisode.mediaMetadata;
+
+              // We have to first fake that we have started the last episode
+              sendTelemetry(mediaId, 5000)
+                .then((): Promise<string> => sendTelemetry(mediaId, runtimeMillis))
+                .then((): void => removeButton.closest('.slick-slide')?.remove());
+            });
+          } else {
+            sendTelemetry(item.mediaMetadata.mediaId, item.mediaMetadata.runtimeMillis)
+              .then((): void => removeButton.closest('.slick-slide')?.remove());
+          }
         }
       });
     }
