@@ -40,29 +40,33 @@ interface MeResponseData {
   };
 }
 
+interface CollectionContainer {
+  style: string;
+  set: {
+    refId: string;
+  };
+}
+
 interface CollectionResponseData {
   data: {
     Collection: {
-      containers: Array<{
-        style: string;
-        set: {
-          refId: string;
-        };
-      }>;
+      containers: CollectionContainer[];
     };
+  };
+}
+
+interface ContinueWatchingItem {
+  contentId: string;
+  mediaMetadata: {
+    mediaId: string;
+    runtimeMillis: number;
   };
 }
 
 interface ContinueWatchingResponseData {
   data: {
     ContinueWatchingSet: {
-      items: Record<string, {
-        contentId: string;
-        mediaMetadata: {
-          mediaId: string;
-          runtimeMillis: number;
-        };
-      }>;
+      items: ContinueWatchingItem[];
     };
   };
 }
@@ -82,32 +86,46 @@ const requestOptions: RequestOptions = {
   },
 };
 
-const continueWatchingData: ContinueWatchingResponseData['data']['ContinueWatchingSet'] = {
-  items: {},
-};
+let continueWatchingContainer: CollectionContainer | undefined;
+
+let initialRequestAttempted = false;
 
 const sendGraphRequest = <D>(
-  method: string, path: string, data?: D, options: RequestInit = {},
-): Promise<Response> => {
-  return fetch(`${BASE_GRAPH_URL}/${path}`, {
-    method,
-    headers: { ...requestOptions.headers, ...options.headers || {} },
-    body: data ? JSON.stringify(data) : undefined,
-  });
-}
+  method: string,
+  path: string,
+  data?: D,
+  options: RequestInit = {},
+): Promise<Response> => (
+    fetch(`${BASE_GRAPH_URL}/${path}`, {
+      method,
+      headers: {
+        ...requestOptions.headers,
+        ...(options.headers || {}),
+      },
+      body: data ? JSON.stringify(data) : undefined,
+    })
+  );
 
 const sendContentRequest = <D>(
-  method: string, path: string, data?: D, options: RequestInit = {},
-): Promise<Response> => {
-  return fetch(`${BASE_CONTENT_URL}/${path}`, {
-    method,
-    headers: { ...requestOptions.headers, ...options.headers || {} },
-    body: data ? JSON.stringify(data) : undefined,
-  });
-}
+  method: string,
+  path: string,
+  data?: D,
+  options: RequestInit = {},
+): Promise<Response> => (
+    fetch(`${BASE_CONTENT_URL}/${path}`, {
+      method,
+      headers: {
+        ...requestOptions.headers,
+        ...(options.headers || {}),
+      },
+      body: data ? JSON.stringify(data) : undefined,
+    })
+  );
 
 const getCollections = (): Promise<CollectionResponseData> => {
-  const { isKidsModeEnabled, impliedMaturityRating, appLanguage, region } = requestOptions;
+  const {
+    isKidsModeEnabled, impliedMaturityRating, appLanguage, region,
+  } = requestOptions;
 
   const path = `svc/content/Collection/PersonalizedCollection/version/6.0/region/${region}/audience/k-${isKidsModeEnabled},l-true/maturity/${impliedMaturityRating}/language/${appLanguage}/contentClass/home/slug/home`;
 
@@ -116,12 +134,36 @@ const getCollections = (): Promise<CollectionResponseData> => {
 };
 
 const getContinueWatching = (setId: string): Promise<ContinueWatchingResponseData> => {
-  const { isKidsModeEnabled, impliedMaturityRating, appLanguage, region } = requestOptions;
+  const {
+    isKidsModeEnabled, impliedMaturityRating, appLanguage, region,
+  } = requestOptions;
 
   const path = `svc/content/ContinueWatching/Set/version/5.1/region/${region}/audience/k-${isKidsModeEnabled},l-true/maturity/${impliedMaturityRating}/language/${appLanguage}/setId/${setId}`;
 
   return sendContentRequest('GET', path)
     .then((response: Response): Promise<ContinueWatchingResponseData> => response.json());
+};
+
+const removeFromContinueWatching = (item: ContinueWatchingItem): Promise<string> => {
+  const data = [
+    {
+      server: {
+        fguid: 'unknown',
+        mediaId: item.mediaMetadata.mediaId,
+      },
+      client: {
+        event: 'urn:dss:telemetry-service:event:stream-sample',
+        timestamp: (new Date()).getTime(),
+        play_head: item.mediaMetadata.runtimeMillis / 1000,
+        playback_session_id: 'unknown',
+        bitrate: 50,
+        interaction_id: 'unknown',
+      },
+    },
+  ];
+
+  return sendGraphRequest('POST', 'telemetry', data)
+    .then((response: Response): Promise<string> => response.text());
 };
 
 const oldXHRSetRequestHeader = window.XMLHttpRequest.prototype.setRequestHeader;
@@ -158,56 +200,38 @@ window.XMLHttpRequest.prototype.setRequestHeader = function setRequestHeader(
     }
     `;
 
-    sendGraphRequest<GraphQLRequestData>('POST', 'v1/public/graphql', {
-      query,
-      variables: {},
-    })
-      .then((response: Response): Promise<MeResponseData> => response.json())
-      .then(({ data }: MeResponseData): void => {
-        requestOptions.isKidsModeEnabled = data.me.account.activeProfile.attributes.kidsModeEnabled ? 'true' : 'false';
-        requestOptions.impliedMaturityRating = data.activeSession.preferredMaturityRating.impliedMaturityRating;
-        requestOptions.appLanguage = data.me.account.activeProfile.attributes.languagePreferences.appLanguage;
-        requestOptions.region = data.activeSession.location.countryCode;
+    if (!initialRequestAttempted) {
+      initialRequestAttempted = true;
 
-        if (Object.keys(continueWatchingData.items).length === 0) {
-          getCollections().then(({ data }: CollectionResponseData): void => {
-            const container = data.Collection.containers.find(
-              (container): boolean => container.style === 'ContinueWatchingSet'
+      sendGraphRequest<GraphQLRequestData>('POST', 'v1/public/graphql', {
+        query,
+        variables: {},
+      })
+        .then((response: Response): Promise<MeResponseData> => response.json())
+        .then(({ data: meData }: MeResponseData): void => {
+          const {
+            me: { account: { activeProfile } },
+            activeSession: { preferredMaturityRating, location },
+          } = meData;
+
+          requestOptions.isKidsModeEnabled = activeProfile.attributes.kidsModeEnabled
+            ? 'true'
+            : 'false';
+          requestOptions.impliedMaturityRating = preferredMaturityRating.impliedMaturityRating;
+          requestOptions.appLanguage = activeProfile.attributes.languagePreferences.appLanguage;
+          requestOptions.region = location.countryCode;
+
+          getCollections().then(({ data: collectionData }: CollectionResponseData): void => {
+            continueWatchingContainer = collectionData.Collection.containers.find(
+              (container: CollectionContainer): boolean => container.style === 'ContinueWatchingSet',
             );
-
-            if (container) {
-              getContinueWatching(container.set.refId).then(({ data }: ContinueWatchingResponseData): void => {
-                continueWatchingData.items = data.ContinueWatchingSet.items;
-              });
-            }
           });
-        }
-      });
+        });
+    }
   }
 
   // @ts-ignore
   return oldXHRSetRequestHeader.apply(this, arguments);
-};
-
-const sendRemoveRequest = (contentId: string): Promise<Response> => {
-  /*const data = [
-    {
-      server: {
-        fguid: 'unknown',
-        mediaId: continueWatching.items[contentId].mediaMetadata.mediaId,
-      },
-      client: {
-        event: 'urn:dss:telemetry-service:event:stream-sample',
-        timestamp: (new Date()).getTime(),
-        play_head: continueWatching.items[contentId].mediaMetadata.runtimeMillis / 1000,
-        playback_session_id: 'unknown',
-        bitrate: 50,
-        interaction_id: 'unknown',
-      },
-    },
-  ];
-
-  return sendContentRequest('POST', 'telemetry', data);*/
 };
 
 const REMOVE_BUTTON_CLASS = 'continue-watching__remove';
@@ -221,10 +245,20 @@ const createRemoveButton = (contentId: string): HTMLButtonElement => {
   removeButton.addEventListener('click', (evt: MouseEvent): void => {
     evt.stopPropagation();
 
-    /*if (continueWatching.items[contentId]) {
-      sendRemoveRequest(contentId)
-        .then((): void => removeButton.closest('.slick-slide')?.remove());
-    }*/
+    if (continueWatchingContainer) {
+      const { set: { refId: setId } } = continueWatchingContainer;
+
+      getContinueWatching(setId).then(({ data }: ContinueWatchingResponseData): void => {
+        const item = data.ContinueWatchingSet.items.find(
+          (thisItem: ContinueWatchingItem): boolean => thisItem.contentId === contentId,
+        );
+
+        if (item) {
+          removeFromContinueWatching(item)
+            .then((): void => removeButton.closest('.slick-slide')?.remove());
+        }
+      });
+    }
   });
 
   const removeIcon: HTMLSpanElement = document.createElement('span');
@@ -296,31 +330,3 @@ locationObserver.observe(document, {
   childList: true,
   subtree: true,
 });
-
-/*let authHeader = '';
-const continueWatching: ContinueWatching = {
-  items: {},
-};
-
-const oldXHROpen = window.XMLHttpRequest.prototype.open;
-
-window.XMLHttpRequest.prototype.open = function open() {
-  this.addEventListener('load', function handleLoad() {
-    if (this.responseURL.includes('svc/content/ContinueWatching')) {
-      const { data } = JSON.parse(this.responseText);
-
-      data.ContinueWatchingSet?.items?.forEach((item: ContinueWatchingItem): void => {
-        continueWatching.items[item.contentId] = {
-          contentId: item.contentId,
-          mediaMetadata: {
-            mediaId: item.mediaMetadata.mediaId,
-            runtimeMillis: item.mediaMetadata.runtimeMillis,
-          },
-        };
-      });
-    }
-  });
-
-  // @ts-ignore
-  return oldXHROpen.apply(this, arguments);
-};*/
