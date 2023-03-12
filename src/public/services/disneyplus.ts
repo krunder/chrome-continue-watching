@@ -210,7 +210,7 @@ window.XMLHttpRequest.prototype.setRequestHeader = function setRequestHeader(
   name: string,
   value: string,
 ) {
-  if (name.toLowerCase() === 'authorization') {
+  if (name.toLowerCase() === 'authorization' && value) {
     requestOptions.headers.Authorization = value;
 
     const query = `
@@ -241,30 +241,34 @@ window.XMLHttpRequest.prototype.setRequestHeader = function setRequestHeader(
     if (!initialRequestAttempted) {
       initialRequestAttempted = true;
 
-      sendRequest<GraphQLRequestData>(BASE_GRAPH_URL, 'POST', 'v1/public/graphql', {
-        query,
-        variables: {},
-      })
-        .then((response: Response): Promise<MeResponseData> => response.json())
-        .then(({ data: meData }: MeResponseData): void => {
-          const {
-            me: { account: { activeProfile } },
-            activeSession: { preferredMaturityRating, location },
-          } = meData;
+      setTimeout((): void => {
+        sendRequest<GraphQLRequestData>(BASE_GRAPH_URL, 'POST', 'v1/public/graphql', {
+          query,
+          variables: {},
+        })
+          .then((response: Response): Promise<MeResponseData> => response.json())
+          .then(({ data: meData }: MeResponseData): void => {
+            const {
+              me: { account: { activeProfile } },
+              activeSession: { preferredMaturityRating, location },
+            } = meData;
 
-          requestOptions.isKidsModeEnabled = activeProfile.attributes.kidsModeEnabled
-            ? 'true'
-            : 'false';
-          requestOptions.impliedMaturityRating = preferredMaturityRating.impliedMaturityRating;
-          requestOptions.appLanguage = activeProfile.attributes.languagePreferences.appLanguage;
-          requestOptions.region = location.countryCode;
+            requestOptions.isKidsModeEnabled = activeProfile.attributes.kidsModeEnabled
+              ? 'true'
+              : 'false';
+            requestOptions.impliedMaturityRating = preferredMaturityRating.impliedMaturityRating;
+            requestOptions.appLanguage = activeProfile.attributes.languagePreferences.appLanguage;
+            requestOptions.region = location.countryCode;
 
-          getCollections().then(({ data: collectionData }: CollectionResponseData): void => {
-            continueWatchingContainer = collectionData.Collection.containers.find(
-              (container: CollectionContainer): boolean => container.style === 'ContinueWatchingSet',
-            );
+            getCollections().then(({ data: collectionData }: CollectionResponseData): void => {
+              const style = 'ContinueWatchingSet';
+
+              continueWatchingContainer = collectionData.Collection.containers.find(
+                (container: CollectionContainer): boolean => container.style === style,
+              );
+            });
           });
-        });
+      }, 2000);
     }
   }
 
