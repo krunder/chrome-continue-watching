@@ -13,5 +13,14 @@
         "https://www.disneyplus.com/home"
       ]
     }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["public/services/disneyplus.js"],
+      "matches": [
+        "https://disneyplus.com/*",
+        "https://www.disneyplus.com/*"
+      ]
+    }
   ]
 }
