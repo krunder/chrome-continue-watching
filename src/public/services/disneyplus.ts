@@ -74,9 +74,17 @@ interface ContinueWatchingResponseData {
   };
 }
 
+interface EpisodesMeta {
+  hits: number;
+  offset: number;
+  page_size: number;
+  hasMore: boolean;
+}
+
 interface Season {
   seasonId: string;
   seasonSequenceNumber: number;
+  episodes_meta: EpisodesMeta;
 }
 
 interface SeriesResponseData {
@@ -303,7 +311,9 @@ const createRemoveButton = (contentId: string): HTMLButtonElement => {
               const { seasons } = data.DmcSeriesBundle.seasons;
 
               const latestSeason = seasons.reduce((latest: Season, season: Season): Season => (
-                season.seasonSequenceNumber > latest.seasonSequenceNumber ? season : latest
+                (
+                  season.seasonSequenceNumber > latest.seasonSequenceNumber && season.episodes_meta.hits > 0
+                ) ? season : latest
               // @ts-ignore
               ), { seasonSequenceNumber: 0 });
 
