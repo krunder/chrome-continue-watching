@@ -5,8 +5,8 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "build": "npm run copy && tsc",
-    "dev": "npm run copy && tsc -w",
+    "build": "npm run copy && esbuild src/**/*.ts --format=esm --minify --platform=node --outdir=./dist",
+    "dev": "npm run copy && esbuild src/**/*.ts --format=esm --watch --platform=node --outdir=./dist",
     "copy": "copyfiles manifest.json dist/ && copyfiles -u 1 img/icon*.png dist/img/",
     "lint": "eslint -c .eslintrc.json src/**/*",
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -41,6 +41,7 @@
     "@types/chrome": "^0.0.221",
     "@typescript-eslint/eslint-plugin": "^5.54.1",
     "@typescript-eslint/parser": "^5.54.1",
+    "esbuild": "^0.19.4",
     "eslint-config-airbnb-base": "^15.0.0",
     "eslint-config-airbnb-typescript": "^17.0.0",
     "typescript": "^5.2.2"
