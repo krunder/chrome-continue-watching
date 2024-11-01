@@ -1,0 +1,50 @@
+{
+  "name": "continue-watching-extension",
+  "version": "1.0.0",
+  "description": "A simple browser extension to add functionality to remove items from continue watching.",
+  "main": "index.js",
+  "scripts": {
+    "build": "node ./build.mjs",
+    "dev": "node ./build.mjs --watch",
+    "copy": "copyfiles manifest.json dist/ && copyfiles -u 1 img/icon*.png dist/img/",
+    "lint": "eslint -c .eslintrc.json src/**/*",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/krunder/continue-watching-extension.git"
+  },
+  "keywords": [
+    "chrome",
+    "extension",
+    "continue",
+    "watching",
+    "disney",
+    "disney+",
+    "disneyplus",
+    "plus"
+  ],
+  "author": "Kyle Underwood",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/krunder/continue-watching-extension/issues"
+  },
+  "homepage": "https://github.com/krunder/continue-watching-extension#readme",
+  "files": [
+    "dist/**/*"
+  ],
+  "dependencies": {
+    "copyfiles": "^2.4.1"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.221",
+    "@typescript-eslint/eslint-plugin": "^5.54.1",
+    "@typescript-eslint/parser": "^5.54.1",
+    "adm-zip": "^0.5.16",
+    "esbuild": "^0.19.4",
+    "eslint-config-airbnb-base": "^15.0.0",
+    "eslint-config-airbnb-typescript": "^17.0.0",
+    "fast-glob": "^3.3.2",
+    "typescript": "^5.2.2"
+  }
+}
